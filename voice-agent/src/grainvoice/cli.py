@@ -88,6 +88,65 @@ def _export_csv(report: ImportReport, path: Path, only_callable: bool) -> int:
     return len(records)
 
 
+#: Фразы, которые агент произносит почти в каждом звонке.
+#: Приветствие сюда не входит — оно собирается из промпта и подставляется
+#: отдельно, вместе с именем агента и названием компании.
+_COMMON_PHRASES = (
+    "Понял.",
+    "Хорошо.",
+    "Ага, понял.",
+    "Вы с НДС работаете или без?",
+    "Протеин какой?",
+    "А протеин какой на эту партию?",
+    "Сколько тонн примерно?",
+    "Хорошо, передам руководителю, он свяжется.",
+    "Понял. Согласую и перезвоню. Сколько бы вас устроило?",
+    "Записал. Руководитель наберёт. Всего доброго.",
+    "Это уже с руководителем, он наберёт и всё обговорит.",
+    "Протеин скажете — назову цену.",
+)
+
+
+def _warm_cache() -> int:
+    """Заранее озвучить приветствие и типовые фразы.
+
+    Без прогрева первый звонок платит за синтез приветствия и ждёт его
+    полсекунды. Прогрев переносит эту плату на один раз.
+    """
+    import asyncio
+
+    from grainvoice.audio import native_output_rate, resolve_device
+    from grainvoice.bot import build_conversation_prompt
+    from grainvoice.certs import ensure_ca_bundle
+    from grainvoice.config import get_settings
+    from grainvoice.prices import PRICE_TIERS
+    from grainvoice.tts_cache import warm_phrases
+
+    ensure_ca_bundle()
+    settings = get_settings()
+    _, greeting = build_conversation_prompt(settings)
+
+    phrases = [" ".join(greeting.split()), *_COMMON_PHRASES]
+
+    # Фразы с ценой: их всего десять — пять ступеней протеина на два
+    # варианта налогообложения. Модель формулирует их по-разному, поэтому
+    # попадание не гарантировано, но самые частые формы стоит заготовить.
+    for tier, price in PRICE_TIERS:
+        for tax in ("без НДС", "с НДС"):
+            phrases.append(f"{price} {tax} за тонну.")
+
+    # Частота та же, на которой будет работать конвейер: кэш хранит сырой
+    # звук, и заготовка на чужой частоте просто не даст попаданий.
+    device = resolve_device(settings.audio_output_device, want_input=False)
+    rate = settings.audio_out_sample_rate or native_output_rate(device) or 24000
+
+    print(f"Озвучиваю {len(phrases)} фраз голосом {settings.tts_voice_id}, {rate} Гц...")
+    written, skipped = asyncio.run(warm_phrases(settings, phrases, sample_rate=rate))
+    print(f"  записано: {written}")
+    print(f"  уже были: {skipped}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Точка входа CLI."""
     parser = argparse.ArgumentParser(
@@ -95,6 +154,11 @@ def main(argv: list[str] | None = None) -> int:
         description="Работа со справочниками хозяйств",
     )
     sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser(
+        "warm-cache",
+        help="заранее озвучить приветствие и типовые фразы",
+    )
 
     imp = sub.add_parser("import", help="прочитать Excel и показать итог")
     imp.add_argument("file", type=Path, help="путь к .xlsx")
@@ -106,6 +170,9 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+
+    if args.command == "warm-cache":
+        return _warm_cache()
 
     try:
         report = import_excel(args.file)

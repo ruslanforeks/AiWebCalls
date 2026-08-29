@@ -175,7 +175,16 @@ async def main(farm: FarmContext) -> None:
 
     worker = PipelineWorker(
         pipeline,
-        params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
+        params=PipelineParams(
+            enable_metrics=True,
+            enable_usage_metrics=True,
+            # Синтез должен работать на той же частоте, что и вывод. Иначе
+            # у него своя (по умолчанию 24000), у транспорта своя, и Pipecat
+            # пересчитывает между ними внутри — лишняя работа на каждом слове.
+            # Заодно это чинит кэш: частота входит в ключ, и заготовка,
+            # сделанная под вывод, не совпадала с частотой синтеза.
+            audio_out_sample_rate=out_rate,
+        ),
         processor_unusable_policy=ProcessorUnusablePolicy.END,
     )
 

@@ -76,33 +76,45 @@ class TestMicLevelThreshold:
 
 
 class TestNativeOutputRate:
-    """Частота подбирается под устройство, чтобы звук не пересчитывался.
+    """Частота синтеза подбирается под устройство.
 
-    Пересчёт на лету на загруженной машине слышен как хрип: встроенный
-    выход работает на 44100, AirPods на 48000.
+    Полностью избежать пересчёта нельзя: родные 44100 и 48000 синтез отдаёт
+    только с тарифа Pro. Но ровное удвоение система выполняет чисто,
+    а дробное отношение даёт слышимые призвуки.
     """
 
-    def test_picks_device_rate_when_supported(self) -> None:
+    def _with(self, device_rate: int):
         from unittest.mock import patch
 
         from grainvoice.audio import AudioDevice, native_output_rate
 
-        devices = [AudioDevice(0, "Встроенный микрофон", 2, 0),
-                   AudioDevice(1, "Встроенный выход", 0, 2)]
+        devices = [AudioDevice(1, "Устройство", 0, 2)]
         with patch("grainvoice.audio.list_audio_devices", return_value=devices), \
-             patch("grainvoice.audio._device_rate", return_value=48000):
-            assert native_output_rate(1) == 48000
+             patch("grainvoice.audio._device_rate", return_value=device_rate):
+            return native_output_rate(1)
 
-    def test_rejects_rate_synth_cannot_produce(self) -> None:
-        """Синтез умеет не любые частоты; на чужой он молча вернёт 24000."""
-        from unittest.mock import patch
+    def test_builtin_output_gets_half(self) -> None:
+        """Встроенный выход 44100 → 22050, ровно вдвое."""
+        assert self._with(44100) == 22050
 
-        from grainvoice.audio import AudioDevice, native_output_rate
+    def test_airpods_gets_half(self) -> None:
+        """AirPods 48000 → 24000, ровно вдвое."""
+        assert self._with(48000) == 24000
 
-        devices = [AudioDevice(1, "Странное устройство", 0, 2)]
-        with patch("grainvoice.audio.list_audio_devices", return_value=devices), \
-             patch("grainvoice.audio._device_rate", return_value=96000):
-            assert native_output_rate(1) is None
+    def test_telephony_rate_used_directly(self) -> None:
+        """Телефонные 16000 синтез отдаёт как есть."""
+        assert self._with(16000) == 16000
+
+    def test_high_tier_rates_not_requested(self) -> None:
+        """44100 и 48000 напрямую просить нельзя: на Creator придёт 403,
+        и агент будет беззвучно шевелить губами."""
+        from grainvoice.audio import SUPPORTED_OUTPUT_RATES
+
+        assert 44100 not in SUPPORTED_OUTPUT_RATES
+        assert 48000 not in SUPPORTED_OUTPUT_RATES
+
+    def test_odd_rate_defers_to_caller(self) -> None:
+        assert self._with(37000) is None
 
     def test_no_devices_returns_none(self) -> None:
         from unittest.mock import patch

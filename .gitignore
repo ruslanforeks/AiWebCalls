@@ -6,6 +6,9 @@
 *.pem
 *.key
 
+# Кэш озвученных фраз — восстанавливается командой warm-cache
+.cache/
+
 # Python
 __pycache__/
 *.py[cod]

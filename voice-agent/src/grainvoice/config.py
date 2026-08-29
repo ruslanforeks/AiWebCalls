@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     tts_speed: float = Field(default=1.0, alias="TTS_SPEED")
     tts_speaker_boost: bool = Field(default=False, alias="TTS_SPEAKER_BOOST")
 
+    # Кэш повторяющихся фраз. Выключать стоит только при отладке самого
+    # синтеза — например, когда подбираете выразительность и хотите слышать
+    # каждый раз свежую озвучку.
+    tts_cache_enabled: bool = Field(default=True, alias="TTS_CACHE")
+
     # --- Аудиоустройства ---
     # Устройства для локального разговора: номер («3») или часть названия
     # («AirPods»). Пусто — системное «по умолчанию», но с наушниками оно

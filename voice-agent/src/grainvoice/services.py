@@ -129,8 +129,17 @@ def build_tts(settings: Settings) -> Any:
     from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
     from pipecat.transcriptions.language import Language
 
+    from grainvoice.tts_cache import CachedElevenLabsTTS
+
     settings.require("elevenlabs_api_key", "tts_voice_id")
-    return ElevenLabsTTSService(
+
+    # Кэш повторяющихся фраз. Приветствие звучит дословно одинаково на каждом
+    # звонке, короткие реакции модель выдаёт десятками — синтезировать их
+    # заново значит платить за один и тот же звук. Главное даже не деньги:
+    # готовая запись играет мгновенно, а это полсекунды в начале разговора.
+    service = CachedElevenLabsTTS if settings.tts_cache_enabled else ElevenLabsTTSService
+
+    return service(
         api_key=settings.elevenlabs_api_key,
         settings=ElevenLabsTTSService.Settings(
             voice=settings.tts_voice_id,
