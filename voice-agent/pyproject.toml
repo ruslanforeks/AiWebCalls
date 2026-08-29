@@ -1,0 +1,43 @@
+[project]
+name = "grainvoice"
+version = "0.1.0"
+description = "Голосовой AI-агент для обзвона фермеров: собирает данные о зерне и структурирует их для CRM"
+requires-python = ">=3.10"
+
+dependencies = [
+    # Голосовой конвейер: транспорт, VAD, обработка перебиваний
+    "pipecat-ai[silero,webrtc,deepgram,elevenlabs,anthropic]>=1.8.1",
+    # Post-call анализ транскрипта
+    "anthropic>=0.40",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "loguru>=0.7",
+    # Запасное хранилище корневых сертификатов: Python из Homebrew и с
+    # python.org часто не видит системное — см. certs.py
+    "certifi",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/grainvoice"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

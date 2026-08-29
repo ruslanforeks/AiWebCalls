@@ -1,0 +1,36 @@
+# Секреты — никогда не коммитим
+.env
+.env.local
+# обломки от прерванной записи редактора
+.!*
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Персональные данные — вне репозитория: записи звонков, расшифровки
+# и выгрузки контактов фермеров
+recordings/
+transcripts/
+*.wav
+*.mp3
+*.csv
+*.xlsx
+
+# Node (для будущего фронтенда)
+node_modules/
+.next/
+dist/
+
+# ОС и редакторы
+.DS_Store
+.idea/
+.vscode/
