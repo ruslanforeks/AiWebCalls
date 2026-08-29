@@ -25,6 +25,16 @@ class TestKeyterms:
         assert "протеин" in terms
         assert "клейковина" in terms
 
+    def test_vat_terms_present(self) -> None:
+        """Про НДС агент спрашивает в каждом звонке.
+
+        Без подсказки «без НДС» слышится как «бизнес» — так и вышло
+        на живом разговоре, и агент переспросил впустую.
+        """
+        terms = FarmContext().keyterms()
+        for term in ("НДС", "без НДС", "с НДС"):
+            assert term in terms, f"«{term}» пропал из подсказок"
+
     def test_no_duplicates(self) -> None:
         """Культура из карточки не должна дублировать общий словарь."""
         terms = FarmContext(known_crops=["пшеница", "пшеница"]).keyterms()
