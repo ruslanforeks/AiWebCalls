@@ -35,7 +35,13 @@ from grainvoice.config import Settings, get_settings
 from grainvoice.farm import FarmContext
 from grainvoice.prices import format_price_table
 from grainvoice.prompts import load_prompt
-from grainvoice.services import build_llm, build_stt, build_tts, build_vad
+from grainvoice.services import (
+    build_llm,
+    build_stt,
+    build_tts,
+    build_turn_strategies,
+    build_vad,
+)
 from grainvoice.transcript import Transcript
 
 # Транспорты, на которых умеет работать агент. Лямбды — чтобы параметры
@@ -105,7 +111,10 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         context,
         # VAD определяет, когда фермер закончил говорить, и позволяет ему
         # перебивать агента — без этого разговор звучит как автоответчик.
-        user_params=LLMUserAggregatorParams(vad_analyzer=build_vad(settings)),
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=build_vad(settings),
+            user_turn_strategies=build_turn_strategies(settings),
+        ),
     )
 
     pipeline = Pipeline(

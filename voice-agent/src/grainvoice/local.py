@@ -32,13 +32,19 @@ from pipecat.processors.aggregators.llm_response_universal import (
 from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 from pipecat.workers.runner import WorkerRunner
 
-from grainvoice.audio import native_output_rate, resolve_device
+from grainvoice.audio import device_native_rate, native_output_rate, resolve_device
 from grainvoice.bot import analyze_call, build_conversation_prompt
 from grainvoice.certs import ensure_ca_bundle
 from grainvoice.config import get_settings
 from grainvoice.farm import FarmContext
 from grainvoice.observability import ConversationLogger
-from grainvoice.services import build_llm, build_stt, build_tts, build_vad
+from grainvoice.services import (
+    build_llm,
+    build_stt,
+    build_tts,
+    build_turn_strategies,
+    build_vad,
+)
 
 
 #: Источники, которые печатают системный промпт целиком перед каждым
@@ -126,9 +132,20 @@ async def main(farm: FarmContext) -> None:
     )
 
     output_device = resolve_device(settings.audio_output_device, want_input=False)
-    # Частота под устройство: пересчёт на лету слышен как хрип.
-    out_rate = settings.audio_out_sample_rate or native_output_rate(output_device) or 24000
-    logger.info("Частота вывода: {} Гц", out_rate)
+
+    # Две разные частоты, и это намеренно.
+    #
+    # tts_rate — что отдаёт синтез. Родные 44100 и 48000 доступны только
+    # с тарифа Pro, поэтому берём наибольшую разрешённую, делящую частоту
+    # устройства нацело.
+    #
+    # device_rate — родная частота устройства. Открываем поток именно на ней,
+    # чтобы система ничего не преобразовывала: её преобразование грубое,
+    # простым удвоением отсчётов, и это слышно как призвуки. Пересчёт
+    # 24000 → 48000 делает Pipecat через soxr, качественно.
+    tts_rate = settings.audio_out_sample_rate or native_output_rate(output_device) or 24000
+    device_rate = device_native_rate(output_device) or tts_rate
+    logger.info("Синтез {} Гц → устройство {} Гц", tts_rate, device_rate)
 
     transport = LocalAudioTransport(
         LocalAudioTransportParams(
@@ -143,7 +160,7 @@ async def main(farm: FarmContext) -> None:
             # процессе работают определитель речи, вебсокет распознавания
             # и поток от модели, и вывод не успевает наполняться.
             audio_out_10ms_chunks=settings.audio_out_chunks_10ms,
-            audio_out_sample_rate=out_rate,
+            audio_out_sample_rate=device_rate,
         )
     )
 
@@ -154,7 +171,10 @@ async def main(farm: FarmContext) -> None:
     context = LLMContext()
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
-        user_params=LLMUserAggregatorParams(vad_analyzer=build_vad(settings)),
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=build_vad(settings),
+            user_turn_strategies=build_turn_strategies(settings),
+        ),
     )
 
     pipeline = Pipeline(
@@ -183,7 +203,7 @@ async def main(farm: FarmContext) -> None:
             # пересчитывает между ними внутри — лишняя работа на каждом слове.
             # Заодно это чинит кэш: частота входит в ключ, и заготовка,
             # сделанная под вывод, не совпадала с частотой синтеза.
-            audio_out_sample_rate=out_rate,
+            audio_out_sample_rate=tts_rate,
         ),
         processor_unusable_policy=ProcessorUnusablePolicy.END,
     )

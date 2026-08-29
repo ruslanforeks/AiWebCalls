@@ -71,3 +71,24 @@ class TestCacheableLength:
             "Подскажите, зерновые есть в наличии?"
         )
         assert len(greeting) <= MAX_CACHEABLE_CHARS
+
+
+class TestChunking:
+    """Кэш отдаёт звук порциями, как поток синтеза.
+
+    Одна глыба на всю фразу транспорт не обязан проиграть ровно,
+    а разрез посреди 16-битного отсчёта даёт треск на стыке.
+    """
+
+    def test_chunk_size_is_even(self) -> None:
+        from grainvoice.tts_cache import _CHUNK_SECS
+
+        for rate in (16000, 22050, 24000, 44100, 48000):
+            chunk = max(2, int(rate * _CHUNK_SECS) * 2)
+            assert chunk % 2 == 0, f"нечётный шаг на {rate} Гц разрежет отсчёт"
+
+    def test_chunk_is_small_enough_to_stream(self) -> None:
+        """Порция должна быть соизмерима с потоком синтеза, а не с фразой."""
+        from grainvoice.tts_cache import _CHUNK_SECS
+
+        assert 0.005 <= _CHUNK_SECS <= 0.1

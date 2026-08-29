@@ -176,3 +176,24 @@ def _device_rate(index: int) -> int | None:
         return None
     finally:
         audio.terminate()
+
+
+def device_native_rate(device_index: int | None) -> int | None:
+    """Родная частота устройства вывода, какой бы она ни была.
+
+    В отличие от native_output_rate здесь нет оглядки на то, что умеет
+    синтез: поток к устройству открывается на его собственной частоте,
+    чтобы система ничего не преобразовывала. Её преобразование грубое,
+    простым удвоением отсчётов, и это слышно как призвуки — качественный
+    пересчёт делает Pipecat через soxr.
+    """
+    devices = list_audio_devices()
+    if not devices:
+        return None
+
+    if device_index is None:
+        candidates = [d for d in devices if d.is_output]
+    else:
+        candidates = [d for d in devices if d.index == device_index]
+
+    return _device_rate(candidates[0].index) if candidates else None

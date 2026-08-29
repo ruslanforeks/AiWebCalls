@@ -189,3 +189,41 @@ def build_vad(settings: Settings) -> Any:
             start_secs=0.2,
         )
     )
+
+
+def build_turn_strategies(settings: Settings) -> Any:
+    """Стратегия определения конца реплики.
+
+    Smart Turn смотрит на смысл сказанного и решает, договорил человек
+    или задумался. Когда он отвечает «не договорил», Pipecat ждёт
+    продолжения — и вот это ожидание по умолчанию длится **три секунды**.
+
+    Для фермера, который говорит «М-м-м, пшеница, триста тонн, четырнадцать-»,
+    вердикт «не договорил» выносится почти на каждой реплике. Три секунды
+    тишины после каждой фразы собеседник читает как «связь пропала»,
+    а не как вежливое ожидание.
+
+    Полторы секунды оставляют запас на «э-э-э» и не создают ощущения,
+    что на том конце никого нет.
+
+    Стратегии начала реплики оставляем по умолчанию: они определяют, когда
+    человек заговорил, и трогать их незачем.
+    """
+    from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
+    from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
+    from pipecat.turns.user_turn_strategies import (
+        TurnAnalyzerUserTurnStopStrategy,
+        UserTurnStrategies,
+        default_user_turn_start_strategies,
+    )
+
+    return UserTurnStrategies(
+        start=default_user_turn_start_strategies(),
+        stop=[
+            TurnAnalyzerUserTurnStopStrategy(
+                turn_analyzer=LocalSmartTurnAnalyzerV3(
+                    params=SmartTurnParams(stop_secs=settings.turn_wait_secs)
+                )
+            )
+        ],
+    )

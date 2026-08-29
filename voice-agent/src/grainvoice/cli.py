@@ -135,15 +135,22 @@ def _warm_cache() -> int:
         for tax in ("без НДС", "с НДС"):
             phrases.append(f"{price} {tax} за тонну.")
 
-    # Частота та же, на которой будет работать конвейер: кэш хранит сырой
-    # звук, и заготовка на чужой частоте просто не даст попаданий.
+    # Частота входит в ключ кэша, а зависит она от устройства вывода:
+    # встроенный выход даёт 22050, AirPods — 24000. Переключение наушников
+    # обнулило бы весь кэш, поэтому заготавливаем на всех рабочих частотах.
     device = resolve_device(settings.audio_output_device, want_input=False)
-    rate = settings.audio_out_sample_rate or native_output_rate(device) or 24000
+    current = settings.audio_out_sample_rate or native_output_rate(device) or 24000
+    rates = sorted({current, 22050, 24000})
 
-    print(f"Озвучиваю {len(phrases)} фраз голосом {settings.tts_voice_id}, {rate} Гц...")
-    written, skipped = asyncio.run(warm_phrases(settings, phrases, sample_rate=rate))
-    print(f"  записано: {written}")
-    print(f"  уже были: {skipped}")
+    total_written = total_skipped = 0
+    for rate in rates:
+        print(f"Озвучиваю {len(phrases)} фраз, {rate} Гц...")
+        written, skipped = asyncio.run(warm_phrases(settings, phrases, sample_rate=rate))
+        total_written += written
+        total_skipped += skipped
+
+    print(f"\n  записано: {total_written}")
+    print(f"  уже были: {total_skipped}")
     return 0
 
 

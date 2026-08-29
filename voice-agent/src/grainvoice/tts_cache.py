@@ -32,6 +32,11 @@ DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[2] / ".cache" / "tts"
 #: не повторяет дословно, а место они занимают.
 MAX_CACHEABLE_CHARS = 200
 
+#: Длина порции, которой кэш отдаёт звук. Синтез шлёт поток мелкими
+#: кусками, и вывод рассчитан на это: одну глыбу он проглотит, но ровно
+#: проиграть не обязан.
+_CHUNK_SECS = 0.02
+
 
 def cache_key(text: str, *, voice: str, model: str, sample_rate: int, settings_fingerprint: str) -> str:
     """Ключ записи по содержимому и всему, что влияет на звук.
@@ -100,9 +105,19 @@ class CachedElevenLabsTTS(ElevenLabsTTSService):
             # Метрику времени до первого звука закрываем сразу: звук уже готов,
             # и без этого в отчёте останется незакрытый замер.
             await self.stop_ttfb_metrics()
-            yield TTSAudioRawFrame(
-                path.read_bytes(), self.sample_rate, 1, context_id=context_id
-            )
+
+            # Отдаём порциями, а не одной глыбой. Синтез шлёт звук потоком,
+            # и вывод рассчитан именно на это: кадр в секунду длиной он
+            # проглотит, но ровно проиграть не обязан. Здесь важно совпасть
+            # с привычным для транспорта размером, а не сэкономить на вызовах.
+            audio = path.read_bytes()
+            # Шаг чётный: 16-битный отсчёт нельзя разрезать посередине,
+            # иначе на стыке порций пойдёт треск.
+            chunk = max(2, int(self.sample_rate * _CHUNK_SECS) * 2)
+            for start in range(0, len(audio), chunk):
+                yield TTSAudioRawFrame(
+                    audio[start : start + chunk], self.sample_rate, 1, context_id=context_id
+                )
             return
 
         self._misses += 1
